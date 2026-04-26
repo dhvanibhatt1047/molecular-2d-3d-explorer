@@ -31,7 +31,7 @@ def init_db():
 
     conn.commit()
     conn.close()
-    print("✅ Database Initialized Successfully (Bond Counters Removed).")
+    print("✅ Database Initialized Successfully.")
 
 if __name__ == "__main__":
     init_db()
