@@ -1,0 +1,385 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Molecular 2D & 3D Explorer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/3Dmol/2.0.1/3Dmol-min.js"></script>
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    
+    <style>
+        .custom-shadow {
+            box-shadow: 0 10px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        .molecule-bg {
+            background-image: radial-gradient(circle at center, #ffffff 0%, #f3f4f6 100%);
+        }
+        #container-3d {
+            width: 100%;
+            height: 300px;
+            position: relative;
+        }
+        ::-webkit-scrollbar { width: 5px; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 10px; }
+        .rule-pass { color: #10b981 !important; }
+        .rule-fail { color: #f43f5e !important; }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-200 min-h-screen font-sans" onload="loadHistory()">
+
+    <div class="max-w-[1550px] mx-auto p-6 flex gap-6">
+        
+        <aside class="w-72 hidden xl:flex flex-col gap-6 h-[90vh] sticky top-6">
+            <div class="bg-slate-900/50 rounded-3xl border border-slate-800 p-6 flex-1 overflow-hidden flex flex-col custom-shadow">
+                <h3 class="text-emerald-400 text-xs font-black uppercase tracking-widest mb-6">Discovery History</h3>
+                <div id="historyList" class="space-y-3 overflow-y-auto pr-2">
+                    <p class="text-slate-600 text-xs italic">No history found...</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/50 rounded-3xl border border-slate-800 p-6 h-64 custom-shadow overflow-hidden flex flex-col">
+                <h3 class="text-blue-400 text-xs font-black uppercase tracking-widest mb-4">Similar Analogs</h3>
+                <div id="suggestionList" class="space-y-2 overflow-y-auto pr-2">
+                    <p class="text-slate-600 text-[10px] italic">Search molecules to build local analogs...</p>
+                </div>
+            </div>
+        </aside>
+
+        <main class="flex-1">
+            <header class="mb-12 text-center lg:text-left">
+                <h1 class="text-5xl font-black tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-300 uppercase">
+                    Molecular 2D & 3D EXPLORER
+                </h1>
+                <p class="text-slate-500 mt-2 font-medium flex items-center justify-center lg:justify-start gap-2">
+                    Precision Structural Diagrams via RDKit 
+                    <span id="validationBadge" class="bg-slate-800 text-slate-400 text-[10px] px-2 py-0.5 rounded border border-slate-700 transition-all">
+                        Waiting for Analysis...
+                    </span>
+                </p>
+            </header>
+
+            <div class="flex flex-col md:flex-row gap-4 mb-12">
+                <input id="molInput" type="text" placeholder="Formula or Name (e.g., C6H6, Caffeine, Ethanol)" 
+                    class="flex-1 bg-slate-900 border border-slate-800 p-5 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all text-lg text-white">
+                <button onclick="analyze()" class="bg-blue-600 hover:bg-blue-500 px-10 py-5 rounded-2xl font-bold text-lg active:scale-95 transition-all shadow-lg shadow-blue-900/20">
+                    SHOW 2D & 3D
+                </button>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                
+                <div class="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 custom-shadow flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-blue-500 text-xs font-black uppercase tracking-widest mb-6">Chemical Identity</h3>
+                        <div class="space-y-6">
+                            <div>
+                                <p class="text-slate-500 text-xs font-bold uppercase mb-1">Search Term / Identity</p>
+                                <p id="molName" class="text-xl font-bold text-white italic leading-tight">---</p>
+                            </div>
+
+                            <div>
+                                <p class="text-slate-500 text-xs font-bold uppercase mb-1">IUPAC Name</p>
+                                <p id="iupacName" class="text-lg font-bold text-blue-400 leading-tight">---</p>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4 pt-4 border-t border-slate-800/50">
+                                <div>
+                                    <p class="text-slate-500 text-[10px] font-bold uppercase">LogP (Solubility)</p>
+                                    <p id="logpVal" class="text-lg font-bold text-blue-200">--</p>
+                                    <p id="logpExp" class="text-[9px] font-bold text-emerald-500 uppercase mt-0.5 opacity-0 transition-opacity">--</p>
+                                </div>
+                                <div>
+                                    <p class="text-slate-500 text-[10px] font-bold uppercase">Drug-Likeness (QED)</p>
+                                    <p id="qedVal" class="text-lg font-bold text-purple-400">-- <span class="text-[10px] opacity-50">/1.0</span></p>
+                                    <p id="qedExp" class="text-[9px] font-bold text-purple-300 uppercase mt-0.5 opacity-0 transition-opacity">--</p>
+                                </div>
+                            </div>
+
+                            <div class="pt-4 border-t border-slate-800/50">
+                                <p class="text-slate-500 text-xs font-bold uppercase mb-1">Molecular Mass</p>
+                                <p class="text-3xl font-black text-emerald-400 uppercase"><span id="weightVal">---</span> <span class="text-sm text-slate-600">g/mol</span></p>
+                            </div>
+
+                            <div class="bg-black/20 p-4 rounded-2xl border border-white/5 mt-4">
+                                <h4 class="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-3">💊 Lipinski Rule of 5</h4>
+                                <div class="grid grid-cols-1 gap-2 text-[11px] font-bold">
+                                    <div class="flex justify-between items-center bg-slate-800/30 p-2 rounded-lg">
+                                        <span class="text-slate-400">Weight ≤ 500</span>
+                                        <span id="check-mw">--</span>
+                                    </div>
+                                    <div class="flex justify-between items-center bg-slate-800/30 p-2 rounded-lg">
+                                        <span class="text-slate-400">LogP ≤ 5</span>
+                                        <span id="check-logp">--</span>
+                                    </div>
+                                    <div class="flex justify-between items-center bg-slate-800/30 p-2 rounded-lg">
+                                        <span class="text-slate-400">H-Donors ≤ 5</span>
+                                        <span id="check-hbd">--</span>
+                                    </div>
+                                    <div class="flex justify-between items-center bg-slate-800/30 p-2 rounded-lg">
+                                        <span class="text-slate-400">H-Acceptors ≤ 10</span>
+                                        <span id="check-hba">--</span>
+                                    </div>
+                                </div>
+                                <p class="text-center mt-3 text-xs font-black uppercase" id="lipinskiFinal">Result: --</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 custom-shadow flex flex-col items-center">
+                    <h3 class="text-slate-500 text-xs font-black uppercase tracking-widest mb-6 w-full">2D Structural Diagram</h3>
+                    <div class="w-full h-[300px] molecule-bg rounded-2xl flex items-center justify-center overflow-hidden border border-white/5 relative">
+                        <img id="molImg" class="hidden max-h-[90%] max-w-[90%] drop-shadow-md transition-opacity duration-500" src="" alt="Molecule Structure">
+                        <div id="placeholder" class="text-slate-400 text-center animate-pulse">
+                            <svg class="w-12 h-12 mx-auto mb-2 opacity-20" fill="currentColor" viewBox="0 0 20 20"><path d="M9 2a1 1 0 000 2h2a1 1 0 100-2H9z"></path><path fill-rule="evenodd" d="M4 5a2 2 0 012-2 3 3 0 003 3h2a3 3 0 003-3 2 2 0 012 2v11a2 2 0 01-2 2H6a2 2 0 01-2-2V5zm3 4a1 1 0 000 2h.01a1 1 0 100-2H7zm3 0a1 1 0 000 2h.01a1 1 0 100-2H10zm3 0a1 1 0 000 2h.01a1 1 0 100-2H13zm-6 3a1 1 0 100 2h.01a1 1 0 100-2H7zm3 0a1 1 0 100 2h.01a1 1 0 100-2H10zm3 0a1 1 0 100 2h.01a1 1 0 100-2H13z" clip-rule="evenodd"></path></svg>
+                            <p class="text-sm font-medium opacity-40">Ready for Analysis</p>
+                        </div>
+                    </div>
+                    
+                    <div class="w-full mt-4 space-y-3">
+                        <div class="bg-slate-800/40 p-3 rounded-xl border border-white/5">
+                            <p class="text-slate-500 text-[10px] font-bold uppercase mb-1">Classification Type</p>
+                            <p id="structBadge" class="text-sm font-bold text-emerald-400 uppercase tracking-tight">---</p>
+                        </div>
+
+                        <div class="bg-slate-800/40 p-3 rounded-xl border border-white/5">
+                            <p class="text-slate-500 text-[10px] font-bold uppercase mb-1">SMILES Notation (1D)</p>
+                            <div id="smilesVal" class="font-mono text-[10px] break-all text-blue-300">Waiting...</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-slate-900/50 p-6 rounded-3xl border border-slate-800 custom-shadow flex flex-col">
+                    <h3 class="text-cyan-400 text-xs font-black uppercase tracking-widest mb-6">3D Interactive Model</h3>
+                    <div id="container-3d" class="rounded-2xl overflow-hidden bg-black border border-slate-800 mb-4"></div>
+                    
+                    <div class="flex flex-col gap-3">
+                        <div class="flex justify-between items-center">
+                            <p class="text-[10px] text-slate-600 uppercase font-bold tracking-tighter">Ball & Stick Simulation (Auto-Rotate)</p>
+                        </div>
+                        
+                        <button id="downloadBtn" onclick="downloadPDFReport()" class="hidden w-full bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg shadow-emerald-900/20 text-xs uppercase tracking-tight">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                            <span id="btnText">Download Information</span>
+                        </button>
+                    </div>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let glviewer = null;
+        const { jsPDF } = window.jspdf;
+
+        async function loadHistory() {
+            try {
+                const res = await fetch('/history');
+                const data = await res.json();
+                const list = document.getElementById('historyList');
+                if(data.length > 0) {
+                    list.innerHTML = data.map(m => {
+                        let sidebarTitle = (m.search_query.length > 15 && (m.search_query.includes('=') || m.search_query.includes('1'))) 
+                                          ? m.iupac : m.search_query;
+                        return `
+                            <div onclick="fetchSavedMol(${m.id})" class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 cursor-pointer hover:border-blue-500/50 hover:bg-slate-800 transition-all group">
+                                <p class="text-white font-bold text-sm truncate group-hover:text-blue-400 uppercase">${sidebarTitle}</p>
+                                <p class="text-[10px] text-blue-400 font-medium truncate italic opacity-60">${m.iupac}</p>
+                            </div>
+                        `;
+                    }).join('');
+                }
+            } catch (err) { console.error("Could not load history", err); }
+        }
+
+        async function fetchSavedMol(id) {
+            try {
+                const res = await fetch(`/get_mol/${id}`);
+                const data = await res.json();
+                if(data.success) { updateUI(data); }
+            } catch (err) { alert("Could not reload molecule."); }
+        }
+
+        function autoSearch(smiles) {
+            document.getElementById('molInput').value = smiles;
+            analyze();
+        }
+
+        async function downloadPDFReport() {
+            const molName = document.getElementById('molName').innerText;
+            if (molName === "---") return alert("Analyze a molecule first!");
+
+            const doc = new jsPDF();
+            const clean = (str) => str.replace(/[^\x00-\x7F]/g, "").trim();
+
+            doc.setFillColor(30, 41, 59);
+            doc.rect(0, 0, 210, 40, 'F');
+            doc.setFontSize(22);
+            doc.setTextColor(255, 255, 255);
+            doc.text("MOLECULAR ANALYSIS REPORT", 20, 25);
+
+            doc.setTextColor(0, 0, 0);
+            doc.setFontSize(14);
+            doc.text("Scientific Identity", 20, 55);
+            doc.line(20, 57, 190, 57);
+
+            doc.setFontSize(11);
+            doc.text(`Search Identity: ${clean(molName)}`, 25, 67);
+            const iupacFull = clean(document.getElementById('iupacName').innerText);
+            const iupacLines = doc.splitTextToSize(`IUPAC Name: ${iupacFull}`, 160);
+            doc.text(iupacLines, 25, 74);
+            let nextY = 74 + (iupacLines.length * 6);
+
+            doc.text(`Structure Type: ${clean(document.getElementById('structBadge').innerText)}`, 25, nextY);
+            doc.text(`Molecular Mass: ${clean(document.getElementById('weightVal').innerText)} g/mol`, 25, nextY + 7);
+            doc.text(`LogP (Solubility): ${clean(document.getElementById('logpVal').innerText)} - ${clean(document.getElementById('logpExp').innerText)}`, 25, nextY + 14);
+            doc.text(`Drug-Likeness (QED): ${clean(document.getElementById('qedVal').innerText)} - ${clean(document.getElementById('qedExp').innerText)}`, 25, nextY + 21);
+            
+            const smilesFull = clean(document.getElementById('smilesVal').innerText);
+            const smilesLines = doc.splitTextToSize(`SMILES String: ${smilesFull}`, 160);
+            doc.text(smilesLines, 25, nextY + 28);
+
+            let diagramY = nextY + 35 + (smilesLines.length * 5);
+            doc.setFontSize(14);
+            doc.text("Structural Diagrams", 20, diagramY);
+            doc.line(20, diagramY + 2, 190, diagramY + 2);
+
+            const molImg = document.getElementById('molImg');
+            if (molImg.src) doc.addImage(molImg.src, 'PNG', 20, diagramY + 8, 75, 75);
+
+            // CRITICAL FIX: Explicitly call render() before capturing to populate the buffer 
+            if (glviewer) {
+                glviewer.render();
+                const canvas3d = document.querySelector('#container-3d canvas');
+                if (canvas3d) {
+                    const canvasData = canvas3d.toDataURL("image/png");
+                    doc.addImage(canvasData, 'PNG', 110, diagramY + 8, 75, 75);
+                }
+            }
+
+            let lipinskiY = diagramY + 95;
+            doc.setFontSize(14);
+            doc.text("Lipinski Rule of 5 Evaluation", 20, lipinskiY);
+            doc.line(20, lipinskiY + 2, 190, lipinskiY + 2);
+            
+            doc.setFontSize(11);
+            doc.text(`- Weight Check: ${clean(document.getElementById('check-mw').innerText)}`, 25, lipinskiY + 12);
+            doc.text(`- LogP Check: ${clean(document.getElementById('check-logp').innerText)}`, 25, lipinskiY + 19);
+            doc.text(`- H-Bond Donors: ${clean(document.getElementById('check-hbd').innerText)}`, 25, lipinskiY + 26);
+            doc.text(`- H-Bond Acceptors: ${clean(document.getElementById('check-hba').innerText)}`, 25, lipinskiY + 33);
+            
+            doc.setFontSize(13);
+            doc.setTextColor(16, 185, 129);
+            doc.text(`FINAL EVALUATION: ${clean(document.getElementById('lipinskiFinal').innerText)}`, 20, lipinskiY + 48);
+
+            doc.save(`${clean(molName)}_Report.pdf`);
+            
+            // Success Notification Pop-up
+            alert(`${clean(molName)} information download successfully!`);
+        }
+
+        function updateUI(data) {
+            let cleanHeader = (data.search_query.length > 15 && data.search_query.includes('=')) ? data.name : data.search_query;
+            document.getElementById('molName').innerText = cleanHeader;
+            document.getElementById('iupacName').innerText = data.name;
+            document.getElementById('smilesVal').innerText = data.smiles_1d;
+            document.getElementById('weightVal').innerText = data.weight;
+            document.getElementById('logpVal').innerText = data.logp;
+            document.getElementById('qedVal').innerHTML = `${data.qed} <span class="text-[10px] opacity-50">/1.0</span>`;
+            
+            document.getElementById('downloadBtn').classList.remove('hidden');
+            document.getElementById('btnText').innerText = `Download ${cleanHeader} Information`;
+
+            const lpExp = document.getElementById('logpExp');
+            lpExp.innerText = `${data.logp_explanation}`;
+            lpExp.style.opacity = "1";
+            
+            const qExp = document.getElementById('qedExp');
+            qExp.innerText = `${data.qed_explanation}`;
+            qExp.style.opacity = "1";
+
+            if (data.insights) {
+                const setCheckVal = (id, val, passed) => {
+                    const el = document.getElementById(id);
+                    el.innerText = val;
+                    el.className = passed ? "rule-pass" : "rule-fail";
+                };
+                
+                setCheckVal('check-mw', data.weight, data.insights.lipinski_checks.mw);
+                setCheckVal('check-logp', data.logp, data.insights.lipinski_checks.logp);
+                setCheckVal('check-hbd', data.h_donors, data.insights.lipinski_checks.hbd);
+                setCheckVal('check-hba', data.h_acceptors, data.insights.lipinski_checks.hba);
+
+                const finalStatus = document.getElementById('lipinskiFinal');
+                finalStatus.innerText = `Final: ${data.insights.lipinski_checks.final}`;
+                finalStatus.className = data.insights.lipinski_checks.final.includes('Pass') ? "text-emerald-400 mt-3 text-xs font-black uppercase" : "text-rose-500 mt-3 text-xs font-black uppercase";
+
+                const sBadge = document.getElementById('structBadge');
+                sBadge.innerText = data.insights.classification;
+            }
+
+            const badge = document.getElementById('validationBadge');
+            badge.innerText = data.status === "Verified" ? "✔ Verified PubChem Dataset" : "⚠ Approximate Structure";
+            badge.className = data.status === "Verified" 
+                ? "bg-blue-500/10 text-blue-400 text-[10px] px-2 py-0.5 rounded border border-blue-500/20"
+                : "bg-orange-500/10 text-orange-400 text-[10px] px-2 py-0.5 rounded border border-orange-500/20";
+            
+            const img = document.getElementById('molImg');
+            img.src = "data:image/png;base64," + data.image_2d;
+            img.classList.remove('hidden');
+            document.getElementById('placeholder').classList.add('hidden');
+
+            let element = $('#container-3d');
+            if(glviewer) glviewer.clear();
+            glviewer = $3Dmol.createViewer(element, { 
+                backgroundColor: 'black',
+                preserveDrawingBuffer: true 
+            });
+            glviewer.addModel(data.mol_3d, "mol");
+            glviewer.setStyle({}, { stick: { radius: 0.15 }, sphere: { scale: 0.25 } });
+            glviewer.zoomTo();
+            glviewer.render();
+            glviewer.animate({loop: "backAndForth", step: 0.5});
+
+            const sList = document.getElementById('suggestionList');
+            if (data.suggestions && data.suggestions.length > 0) {
+                sList.innerHTML = data.suggestions.map(s => `
+                    <div onclick="autoSearch('${s.smiles}')" class="bg-slate-800/50 p-4 rounded-xl border border-slate-700/50 cursor-pointer hover:border-blue-500/50 transition-all uppercase text-[10px] font-bold truncate">
+                        ${s.name}
+                    </div>
+                `).join('');
+            } else {
+                sList.innerHTML = '<p class="text-slate-600 text-[10px] italic">No local analogs found.</p>';
+            }
+        }
+
+        async function analyze() {
+            const input = document.getElementById('molInput').value;
+            if(!input) return;
+            const btn = document.querySelector('button[onclick="analyze()"]');
+            btn.innerText = "SEARCHING...";
+            btn.disabled = true;
+            try {
+                const res = await fetch('/analyze', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ name: input })
+                });
+                const data = await res.json();
+                if(data.success) {
+                    updateUI(data);
+                    loadHistory();
+                } else { alert("Error: " + data.error); }
+            } catch (error) {
+                alert("Connection failed.");
+            } finally {
+                btn.innerText = "SHOW 2D & 3D";
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

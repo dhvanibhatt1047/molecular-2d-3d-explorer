@@ -1,0 +1,21 @@
+# Python bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environments
+.venv/
+env/
+venv/
+ENV/
+
+# Database (Crucial: do not push your local history to GitHub)
+molecules.db
+
+# IDEs
+.vscode/
+.idea/
+
+# Reports generated during testing
+*.pdf
+*.txt
